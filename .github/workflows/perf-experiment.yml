@@ -1,0 +1,94 @@
+# Experiment only: compares variants of the CI Linux job side by side on
+# the same commit. Run it with workflow_dispatch on main, so cache volumes
+# can be saved.
+name: Perf experiment
+on:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Linux (${{ matrix.variant }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: baseline
+            runner: tuist-linux
+          - variant: large
+            runner: tuist-linux-large
+          - variant: pythonx
+            runner: tuist-linux
+            pythonx_volume: true
+          - variant: retries
+            runner: tuist-linux
+            retries: "2"
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      MIX_ENV: test
+      TUIST_PROJECT: tuist/livebook
+      TUIST_TEST_RETRIES: ${{ matrix.retries || '0' }}
+    steps:
+      - name: Checkout git repo
+        uses: actions/checkout@v6
+
+      - name: Print machine
+        run: echo "nproc=$(nproc) mem=$(free -g | awk '/Mem:/ {print $2}')G"
+
+      - name: Read ./versions
+        run: |
+          . versions
+          echo "elixir=$elixir" >> $GITHUB_ENV
+          echo "otp=$otp" >> $GITHUB_ENV
+
+      - name: Install Erlang & Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.otp }}
+          elixir-version: ${{ env.elixir }}
+
+      - name: Attach deps volume
+        uses: tuist/cache-volume@v1
+        with:
+          key: mix-deps
+          path: deps
+
+      - name: Attach _build volume
+        uses: tuist/cache-volume@v1
+        with:
+          key: mix-build-${{ env.elixir }}-${{ env.otp }}
+          path: _build
+
+      - name: Attach Pythonx cache volume
+        if: matrix.pythonx_volume
+        uses: tuist/cache-volume@v1
+        with:
+          key: pythonx-cache
+          path: ~/.cache/pythonx
+
+      - name: Install mix dependencies
+        run: mix deps.get
+
+      - name: Check formatting
+        run: mix format --check-formatted
+
+      - name: Check warnings
+        run: mix tuist.compile --warnings-as-errors
+
+      - name: Run tests
+        run: mix tuist.test --cover
+        env:
+          TEST_GIT_SSH_KEY: ${{ secrets.TEST_GIT_SSH_KEY }}
+
+      - name: Install bun dependencies
+        run: |
+          mix bun.install --if-missing
+          mix bun assets install
+
+      - name: Check assets formatting
+        run: mix bun assets run format-check
+
+      - name: Run assets tests
+        run: mix bun assets run test
