@@ -1,7 +1,7 @@
 defmodule Livebook.Runtime.Standalone do
   defstruct [:erl_flags, :node, :server_pid]
 
-  # A runtime backed by a standalone Elixir node managed by Livebook.
+  # A runtime backed by a standalone Elixir node, managed by Livebook.
   #
   # Livebook is responsible for starting and terminating the node.
   # Most importantly we have to make sure the started node doesn't
