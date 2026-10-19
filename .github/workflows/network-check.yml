@@ -1,0 +1,15 @@
+# Experiment only: checks outbound SSH from Tuist runners
+name: Network check
+on:
+  workflow_dispatch:
+
+jobs:
+  ssh:
+    runs-on: tuist-linux
+    steps:
+      - name: TCP to github.com:22
+        run: timeout 15 bash -c '</dev/tcp/github.com/22' && echo "port 22 open" || echo "port 22 blocked or timed out (exit $?)"
+      - name: TCP to ssh.github.com:443
+        run: timeout 15 bash -c '</dev/tcp/ssh.github.com/443' && echo "port 443 open" || echo "port 443 blocked or timed out (exit $?)"
+      - name: SSH over 443 without a key
+        run: ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -T -p 443 git@ssh.github.com 2>&1 || true
